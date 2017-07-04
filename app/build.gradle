@@ -1,0 +1,32 @@
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion 21
+    buildToolsVersion '26.0.0'
+    defaultConfig {
+        minSdkVersion 15
+        targetSdkVersion 21
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+    sourceSets {
+        main { jniLibs.srcDirs = ["libs"] }
+    }
+    productFlavors {
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_7
+        targetCompatibility JavaVersion.VERSION_1_7
+    }
+}
+
+dependencies {
+    compile files('libs/unity-classes.jar')
+    compile files('libs/Sunflower.jar')
+    compile files('libs/Msc.jar')
+    compile files('libs/VoiceRecognition-2.1.20.jar')
+}
