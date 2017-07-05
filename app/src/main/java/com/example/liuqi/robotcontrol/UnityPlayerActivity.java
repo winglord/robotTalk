@@ -58,7 +58,7 @@ public class UnityPlayerActivity extends Activity
     private SpeechSynthesizer mTts;
     private String mEngineType = SpeechConstant.TYPE_CLOUD;
     // 默认发音人
-    private String voicer = "xiaoyan";
+    private String voicer = "xiaoqi";
     // 缓冲进度
     private int mPercentForBuffering = 0;
     // 播放进度
@@ -116,7 +116,7 @@ public class UnityPlayerActivity extends Activity
             showTip("听写失败,错误码：" + ret);
         } else {
             showTip(getString(R.string.text_begin));
-            sendMessage("ListenStart");
+            sendMessage("ListenStart-other");
         }
     }
 
@@ -178,7 +178,7 @@ public class UnityPlayerActivity extends Activity
         @Override
         public void onBeginOfSpeech() {
             // 此回调表示：sdk内部录音机已经准备好了，用户可以开始语音输入
-            showTip("开始说话");
+            //showTip("开始说话");
         }
 
         @Override
@@ -193,7 +193,7 @@ public class UnityPlayerActivity extends Activity
         @Override
         public void onEndOfSpeech() {
             // 此回调表示：检测到了语音的尾端点，已经进入识别过程，不再接受语音输入
-            showTip("结束说话");
+            //showTip("结束说话");
         }
 
         @Override
@@ -202,18 +202,18 @@ public class UnityPlayerActivity extends Activity
                 //解析语音
                 String word = parseVoice(results.getResultString());
                 if (word.equals("休息吧")){
-                    speakingText("有需要随时呼叫小度");
+					sendMessage("ListenStop-sleep");
                     wakeUpFlag = false;
                 }
                 else{
                     showTip(word);
-                    understanderText(word);
+                    sendMessage("ListenSuccess-" + word);
                 }
             }
         }
         @Override
         public void onVolumeChanged(int volume, byte[] data) {
-            showTip("当前正在说话，音量大小：" + volume);
+            //showTip("当前正在说话，音量大小：" + volume);
         }
 
         @Override
@@ -249,7 +249,7 @@ public class UnityPlayerActivity extends Activity
     private SynthesizerListener mTtsListener = new SynthesizerListener() {
         @Override
         public void onSpeakBegin() {
-            //showTip("开始播放");
+            sendMessage("SpeakStart-other");
         }
 
         @Override
@@ -267,20 +267,20 @@ public class UnityPlayerActivity extends Activity
                                      String info) {
             // 合成进度
             mPercentForBuffering = percent;
-            //showTip("000");
+            showTip("合成进度：" + percent);
         }
 
         @Override
         public void onSpeakProgress(int percent, int beginPos, int endPos) {
             // 播放进度
             mPercentForPlaying = percent;
-            //showTip("000");
+            showTip("播放进度：" + percent);
         }
 
         @Override
         public void onCompleted(SpeechError error) {
             if (error == null) {
-                //showTip("播放完成");
+                sendMessage("SpeakSuccess-other");
             }
             else {
                 showTip(error.getPlainDescription(true));
@@ -352,13 +352,12 @@ public class UnityPlayerActivity extends Activity
             String word = JsonParser.parseUnderstandResult(
                     result.getResultString().toString());
             if (!TextUtils.isEmpty(word)) {
-                sendMessage("ListenSuccess");
+                sendMessage("UnderStandSuccess-" + word);
                 speakingText(word);
             }
             else
             {
-                sendMessage("ListenFailed");
-                speakingText("小度听不懂，请换个说法");
+                sendMessage("UnderStandFailed-none");
             }
         }};
 
@@ -426,11 +425,10 @@ public class UnityPlayerActivity extends Activity
                     JSONObject json = new JSONObject(params);
                     if ("wp.data".equals(name)) { // 每次唤醒成功, 将会回调name=wp.data的时间, 被激活的唤醒词在params的word字段
                         String word = json.getString("word");
-                        sendMessage("WakeUpSuccess");
-                        speakingText("有什么吩咐吗");
+                        sendMessage("WakeUpSuccess-wakeup");
                         wakeUpFlag = true;
                     } else if ("wp.exit".equals(name)) {
-                        sendMessage("WakeUpStoped");
+                        sendMessage("WakeUpStoped-other");
                         wakeUpFlag = false;
                     }
                 } catch (JSONException e) {
@@ -443,34 +441,32 @@ public class UnityPlayerActivity extends Activity
         HashMap params = new HashMap();
         params.put("kws-file", "assets:///WakeUp.bin"); // 设置唤醒资源, 唤醒资源请到 http://yuyin.baidu.com/wake#m4 来评估和导出
         mWpEventManager.send("wp.start", new JSONObject(params).toString(), null, 0, 0);
-        showTip("开始唤醒");
-        sendMessage("WaitWakeUp");
+        showTip("等待唤醒");
+        sendMessage("WaitWakeUp-other");
 	}
 
     @Override
     protected void onResume() {
         super.onResume();
-
 		mUnityPlayer.resume();
 		
 		if (unityInitFlag)
 		{
 			initWakeUp();
 		}
-        
+        sendMessage("MachineResume-other");
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-		
 		mUnityPlayer.pause();
 
         if (unityInitFlag)
         {
             // 停止唤醒监听
             mWpEventManager.send("wp.stop", null, null, 0, 0);
-            showTip("结束唤醒");
+            wakeUpFlag = false;
         }
     }
 
