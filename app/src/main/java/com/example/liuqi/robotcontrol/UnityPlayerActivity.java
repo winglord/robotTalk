@@ -58,7 +58,9 @@ public class UnityPlayerActivity extends Activity
     private SpeechSynthesizer mTts;
     private String mEngineType = SpeechConstant.TYPE_CLOUD;
     // 默认发音人
-    private String voicer = "xiaoqi";
+    private String voicer = "mengmeng";
+    private String voiceSpeed = "100";
+    private String voicePitch = "60";
     // 缓冲进度
     private int mPercentForBuffering = 0;
     // 播放进度
@@ -82,6 +84,13 @@ public class UnityPlayerActivity extends Activity
 		mUnityPlayer.requestFocus();
 		
 	}
+
+    public void changeSpeechParam(String newVoicer, String newVoiceSpeed, String newVoicePitch)
+    {
+        voicer = newVoicer;
+        voiceSpeed = newVoiceSpeed;
+        voicePitch = newVoicePitch;
+    }
 	
 	public void startInitRobot()
     {
@@ -204,6 +213,7 @@ public class UnityPlayerActivity extends Activity
                 if (word.equals("休息吧")){
 					sendMessage("ListenStop-sleep");
                     wakeUpFlag = false;
+                    initWakeUp();
                 }
                 else{
                     showTip(word);
@@ -326,9 +336,9 @@ public class UnityPlayerActivity extends Activity
             mTts.setParameter(SpeechConstant.VOICE_NAME,"");
         }
         //设置合成语速
-        mTts.setParameter(SpeechConstant.SPEED, "80");
+        mTts.setParameter(SpeechConstant.SPEED, voiceSpeed);
         //设置合成音调
-        mTts.setParameter(SpeechConstant.PITCH, "65");
+        mTts.setParameter(SpeechConstant.PITCH, voicePitch);
         //设置合成音量
         mTts.setParameter(SpeechConstant.VOLUME,"50");
         //设置播放器音频流类型
@@ -391,6 +401,7 @@ public class UnityPlayerActivity extends Activity
 
     private void speakingText(String showText)
     {
+        setParamForSpeak();
         int code = mTts.startSpeaking(showText, mTtsListener);
 //		/**
 //		 * 只保存音频不进行播放接口,调用此接口请注释startSpeaking接口
@@ -427,9 +438,9 @@ public class UnityPlayerActivity extends Activity
                         String word = json.getString("word");
                         sendMessage("WakeUpSuccess-wakeup");
                         wakeUpFlag = true;
+                        mWpEventManager.send("wp.stop", null, null, 0, 0);
                     } else if ("wp.exit".equals(name)) {
                         sendMessage("WakeUpStoped-other");
-                        wakeUpFlag = false;
                     }
                 } catch (JSONException e) {
                     throw new AndroidRuntimeException(e);
@@ -443,6 +454,7 @@ public class UnityPlayerActivity extends Activity
         mWpEventManager.send("wp.start", new JSONObject(params).toString(), null, 0, 0);
         showTip("等待唤醒");
         sendMessage("WaitWakeUp-other");
+        wakeUpFlag = false;
 	}
 
     @Override
@@ -464,9 +476,15 @@ public class UnityPlayerActivity extends Activity
 
         if (unityInitFlag)
         {
-            // 停止唤醒监听
-            mWpEventManager.send("wp.stop", null, null, 0, 0);
-            wakeUpFlag = false;
+            if (wakeUpFlag)
+            {
+                wakeUpFlag = false;
+            }
+            else
+            {
+                // 停止唤醒监听
+                mWpEventManager.send("wp.stop", null, null, 0, 0);
+            }
         }
     }
 
