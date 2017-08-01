@@ -356,7 +356,6 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
                     result.getResultString().toString());
             if (!TextUtils.isEmpty(word)) {
                 sendMessage("UnderStandSuccess-" + word);
-                speakingText(word);
             }
             else
             {
