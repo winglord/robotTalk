@@ -1,21 +1,43 @@
 package com.example.liuqi.robotcontrol;
 
 import com.unity3d.player.*;
-import android.app.Activity;
-import android.content.res.Configuration;
-import android.graphics.PixelFormat;
-import android.os.Bundle;
-import android.view.KeyEvent;
-import android.view.MotionEvent;
-import android.view.Window;
-
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.UUID;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.bluetooth.BluetoothServerSocket;
+import android.bluetooth.BluetoothSocket;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.os.Handler;
+import android.os.Message;
+import android.os.Environment;
+import android.os.Bundle;
 import android.widget.Toast;
+import android.widget.TextView;
+import android.text.TextUtils;
+import android.util.AndroidRuntimeException;
+import android.util.Log;
+import android.content.BroadcastReceiver;
+import android.content.SharedPreferences;
+import android.content.Intent;
+import android.content.Context;
+import android.content.IntentFilter;
+import android.content.DialogInterface;
+import android.graphics.PixelFormat;
+import android.view.Window;
+
 import android.os.Environment;
 import android.text.TextUtils;
 import android.util.AndroidRuntimeException;
@@ -66,6 +88,20 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
     private EventManager mWpEventManager;
     private boolean wakeUpFlag = false;
 	private boolean unityInitFlag = false;
+
+    //蓝牙相关
+    public static final String PROTOCOL_SCHEME_RFCOMM = "btspp";
+    private BluetoothAdapter blueadapter=null;
+    private DeviceReceiver mydevice=new DeviceReceiver();
+    private boolean hasregister=false;
+    private String lockName = "WINGLORD";
+    private Boolean findTargetBT = false;
+    private BluetoothServerSocket mserverSocket = null;
+    private ServerThread startServerThread = null;
+    private clientThread clientConnectThread = null;
+    private BluetoothSocket socket = null;
+    private BluetoothDevice device = null;
+    private readThread mreadThread = null;;
 	
 
 	// Setup activity layout
@@ -84,9 +120,110 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
         voiceSpeed = newVoiceSpeed;
         voicePitch = newVoicePitch;
     }
+
+    private void setBluetooth(){
+        blueadapter=BluetoothAdapter.getDefaultAdapter();
+
+        if(blueadapter!=null){  //Device support Bluetooth
+            //确认开启蓝牙
+            if(!blueadapter.isEnabled()){
+                //请求用户开启
+                Intent intent=new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                startActivityForResult(intent, RESULT_FIRST_USER);
+                //使蓝牙设备可见，方便配对
+                Intent in=new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+                in.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 200);
+                startActivity(in);
+                //直接开启，不经过提示
+                blueadapter.enable();
+            }
+        }
+        else{   //Device does not support Bluetooth
+
+            AlertDialog.Builder dialog = new AlertDialog.Builder(this);
+            dialog.setTitle("No bluetooth devices");
+            dialog.setMessage("Your equipment does not support bluetooth, please change device");
+
+            dialog.setNegativeButton("cancel",
+                    new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+
+                        }
+                    });
+            dialog.show();
+        }
+    }
+
+    private void startSearchForBlueTooth() {
+        if (blueadapter != null && !blueadapter.isDiscovering()) {
+            blueadapter.startDiscovery();
+        }
+    }
+
+    private void bluetoothResume()
+    {
+        BluetoothMsg.serviceOrCilent=BluetoothMsg.ServerOrCilent.CILENT;
+
+        if(BluetoothMsg.isOpen)
+        {
+            showLog( "连接已经打开，可以通信。如果要再建立连接，请先断开！");
+            return;
+        }
+        if(BluetoothMsg.serviceOrCilent==BluetoothMsg.ServerOrCilent.CILENT)
+        {
+            String address = BluetoothMsg.BlueToothAddress;
+            if(!address.equals("null"))
+            {
+                device = blueadapter.getRemoteDevice(address);
+                clientConnectThread = new clientThread();
+                clientConnectThread.start();
+                BluetoothMsg.isOpen = true;
+            }
+            else
+            {
+                showLog("address is null !");
+            }
+        }
+        else if(BluetoothMsg.serviceOrCilent==BluetoothMsg.ServerOrCilent.SERVICE)
+        {
+            startServerThread = new ServerThread();
+            startServerThread.start();
+            BluetoothMsg.isOpen = true;
+        }
+    }
+
+    private void bluetoothDestroy()
+    {
+        if (BluetoothMsg.serviceOrCilent == BluetoothMsg.ServerOrCilent.CILENT)
+        {
+            shutdownClient();
+        }
+        else if (BluetoothMsg.serviceOrCilent == BluetoothMsg.ServerOrCilent.SERVICE)
+        {
+            shutdownServer();
+        }
+        BluetoothMsg.isOpen = false;
+        BluetoothMsg.serviceOrCilent = BluetoothMsg.ServerOrCilent.NONE;
+    }
+
+    private void sendMessageByBlueTooth(String msgText)
+    {
+        if (msgText.length()>0)
+        {
+            sendMessageHandle(msgText);
+        }
+        else
+        {
+            showLog("发送内容不能为空!");
+        }
+    }
 	
 	public void startInitRobot()
     {
+        //初始化蓝牙功能
+        setBluetooth();
+
         //初始化引擎
         SpeechUtility.createUtility(this, SpeechConstant.APPID +"="+APP_ID);
 
@@ -431,6 +568,16 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
                         sendMessage("WakeUpSuccess-wakeup");
                         wakeUpFlag = true;
                         mWpEventManager.send("wp.stop", null, null, 0, 0);
+                        //注册蓝牙接收广播
+                        if(!hasregister){
+                            hasregister=true;
+                            startSearchForBlueTooth();
+                            showLog("start search bt");
+                            IntentFilter filterStart=new IntentFilter(BluetoothDevice.ACTION_FOUND);
+                            IntentFilter filterEnd=new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+                            registerReceiver(mydevice, filterStart);
+                            registerReceiver(mydevice, filterEnd);
+                        }
                     } else if ("wp.exit".equals(name)) {
                         sendMessage("WakeUpStoped-other");
                     }
@@ -478,5 +625,243 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        if(blueadapter!=null&&blueadapter.isDiscovering()){
+            blueadapter.cancelDiscovery();
+        }
+        if(hasregister){
+            hasregister=false;
+            unregisterReceiver(mydevice);
+        }
+        super.onDestroy();
+        bluetoothDestroy();
+    }
+
+    private class DeviceReceiver extends BroadcastReceiver{
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action =intent.getAction();
+            if(BluetoothDevice.ACTION_FOUND.equals(action)){    //搜索到新设备
+                BluetoothDevice btd=intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                //搜索没有配过对的蓝牙设备
+                if (btd.getName().equals(lockName)) {
+                    final String msg = btd.getName()+'\n'+ btd.getAddress();
+                    findTargetBT = true;
+
+                    BluetoothMsg.BlueToothAddress=msg.substring(msg.length()-17);
+
+                    if(BluetoothMsg.lastblueToothAddress!=BluetoothMsg.BlueToothAddress) {
+                        BluetoothMsg.lastblueToothAddress = BluetoothMsg.BlueToothAddress;
+                    }
+                    //蓝牙相关
+                    bluetoothResume();
+                }
+            }
+            else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)){
+                if (!findTargetBT)
+                {
+                    sendMessage("SearchBlueToothFailed-bluetooth");
+                }
+            }
+        }
+    }
+
+    private Handler LinkDetectedHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            showLog((String)msg.obj);
+        }
+    };
+
+    //开启客户端
+    private class clientThread extends Thread {
+        @Override
+        public void run() {
+            try {
+                //创建一个Socket连接：只需要服务器在注册时的UUID号
+                // socket = device.createRfcommSocketToServiceRecord(BluetoothProtocols.OBEX_OBJECT_PUSH_PROTOCOL_UUID);
+                socket = device.createRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
+                //连接
+                Message msg2 = new Message();
+                msg2.obj = "请稍候，正在连接服务器:"+BluetoothMsg.BlueToothAddress;
+                msg2.what = 0;
+                LinkDetectedHandler.sendMessage(msg2);
+
+                socket.connect();
+
+                Message msg = new Message();
+                msg.obj = "已经连接上服务端！可以发送信息。";
+                msg.what = 0;
+                LinkDetectedHandler.sendMessage(msg);
+                sendMessage("LinkBlueToothSuccess-bluetooth");
+                //启动接受数据
+                mreadThread = new readThread();
+                mreadThread.start();
+            }
+            catch (IOException e)
+            {
+                Log.e("connect", "", e);
+                Message msg = new Message();
+                msg.obj = "连接服务端异常！断开连接重新试一试。";
+                msg.what = 0;
+                LinkDetectedHandler.sendMessage(msg);
+            }
+        }
+    };
+
+    //开启服务器
+    private class ServerThread extends Thread {
+        @Override
+        public void run() {
+
+            try {
+                    /* 创建一个蓝牙服务器
+                     * 参数分别：服务器名称、UUID   */
+                mserverSocket = blueadapter.listenUsingRfcommWithServiceRecord(PROTOCOL_SCHEME_RFCOMM,
+                        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
+
+                Log.d("server", "wait cilent connect...");
+
+                Message msg = new Message();
+                msg.obj = "请稍候，正在等待客户端的连接...";
+                msg.what = 0;
+                LinkDetectedHandler.sendMessage(msg);
+
+                    /* 接受客户端的连接请求 */
+                socket = mserverSocket.accept();
+                Log.d("server", "accept success !");
+
+                Message msg2 = new Message();
+                String info = "客户端已经连接上！可以发送信息。";
+                msg2.obj = info;
+                msg.what = 0;
+                LinkDetectedHandler.sendMessage(msg2);
+                //启动接受数据
+                mreadThread = new readThread();
+                mreadThread.start();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    };
+    /* 停止服务器 */
+    private void shutdownServer() {
+        new Thread() {
+            @Override
+            public void run() {
+                if(startServerThread != null)
+                {
+                    startServerThread.interrupt();
+                    startServerThread = null;
+                }
+                if(mreadThread != null)
+                {
+                    mreadThread.interrupt();
+                    mreadThread = null;
+                }
+                try {
+                    if(socket != null)
+                    {
+                        socket.close();
+                        socket = null;
+                    }
+                    if (mserverSocket != null)
+                    {
+                        mserverSocket.close();/* 关闭服务器 */
+                        mserverSocket = null;
+                    }
+                } catch (IOException e) {
+                    Log.e("server", "mserverSocket.close()", e);
+                }
+            };
+        }.start();
+    }
+    /* 停止客户端连接 */
+    private void shutdownClient() {
+        new Thread() {
+            @Override
+            public void run() {
+                if(clientConnectThread!=null)
+                {
+                    clientConnectThread.interrupt();
+                    clientConnectThread= null;
+                }
+                if(mreadThread != null)
+                {
+                    mreadThread.interrupt();
+                    mreadThread = null;
+                }
+                if (socket != null) {
+                    try {
+                        socket.close();
+                    } catch (IOException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
+                    socket = null;
+                }
+            };
+        }.start();
+    }
+
+    //发送数据
+    private void sendMessageHandle(String msg)
+    {
+        if (socket == null)
+        {
+            showLog("没有连接");
+            return;
+        }
+        try {
+            OutputStream os = socket.getOutputStream();
+            os.write(msg.getBytes());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    //读取数据
+    private class readThread extends Thread {
+        @Override
+        public void run() {
+
+            byte[] buffer = new byte[1024];
+            int bytes;
+            InputStream mmInStream = null;
+
+            try {
+                mmInStream = socket.getInputStream();
+            } catch (IOException e1) {
+                // TODO Auto-generated catch block
+                e1.printStackTrace();
+            }
+            while (true) {
+                try {
+                    // Read from the InputStream
+                    if( (bytes = mmInStream.read(buffer)) > 0 )
+                    {
+                        byte[] buf_data = new byte[bytes];
+                        for(int i=0; i<bytes; i++)
+                        {
+                            buf_data[i] = buffer[i];
+                        }
+                        String s = new String(buf_data);
+                        Message msg = new Message();
+                        msg.obj = s;
+                        msg.what = 1;
+                        LinkDetectedHandler.sendMessage(msg);
+                    }
+                } catch (IOException e) {
+                    try {
+                        mmInStream.close();
+                    } catch (IOException e1) {
+                        // TODO Auto-generated catch block
+                        e1.printStackTrace();
+                    }
+                    break;
+                }
+            }
+        }
+    }
 	// This ensures the layout will be correct.
 }
