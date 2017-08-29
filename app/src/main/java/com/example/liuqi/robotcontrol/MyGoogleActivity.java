@@ -114,7 +114,7 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
 		
 	}
 
-    public void changeSpeechParam(String newVoicer, String newVoiceSpeed, String newVoicePitch)
+    public void changeSpeechParam(String sdkType, String newVoicer, String newVoiceSpeed, String newVoicePitch)
     {
         voicer = newVoicer;
         voiceSpeed = newVoiceSpeed;
