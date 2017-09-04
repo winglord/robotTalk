@@ -135,7 +135,12 @@ public class iflytekSpeakSynth {
 
         @Override
         public void onCompleted(SpeechError error) {
-            MyGoogleActivity.AfterSpeakComplete(error == null, error.getPlainDescription(true));
+            String errorLog = "NO ERROR";
+            if(error != null)
+            {
+                errorLog = error.getPlainDescription(true);
+            }
+            MyGoogleActivity.AfterSpeakComplete(error == null, errorLog);
         }
 
         @Override

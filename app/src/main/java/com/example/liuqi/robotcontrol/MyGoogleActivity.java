@@ -8,6 +8,7 @@ import org.json.JSONObject;
 import java.util.HashMap;
 
 import android.os.Bundle;
+import android.os.Handler;
 import android.text.TextUtils;
 import android.util.AndroidRuntimeException;
 import android.graphics.PixelFormat;
@@ -102,7 +103,7 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
 
     public void changeSpeechParam(String sdkType, String newVoicer, String newVoiceSpeed, String newVoicePitch)
     {
-        if (sdkType == "xunfei")
+        if (sdkType.equals("xunfei"))
         {
             iflytekSpeakSynth.changeSpeechParam(newVoicer, newVoiceSpeed, newVoicePitch);
         }
@@ -111,6 +112,12 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
             baiduSpeakSynth.changeSpeechParam(newVoicer, newVoiceSpeed, newVoicePitch);
         }
         currentSdk = sdkType;
+    }
+
+    public void changeSdkType(String sdkType)
+    {
+        currentSdk = sdkType;
+        showLog("sdk:" + currentSdk + "#");
     }
 
     private void understanderText(String text){
@@ -126,12 +133,14 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
 
     private void speakingText(String showText)
     {
-        if (currentSdk == "xunfei") {
+        if (currentSdk.equals("xunfei")) {
             iflytekSpeakSynth.TrySpeaking(showText);
+            showLog("iflytekSpeakSynth sdk:" + currentSdk + "#");
         }
         else
         {
             baiduSpeakSynth.TrySpeaking(showText);
+            showLog("baiduSpeakSynth sdk:" + currentSdk + "#");
         }
     }
 
@@ -188,8 +197,8 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
                         sendMessage("WakeUpSuccess-wakeup");
                         wakeUpFlag = true;
                         mWpEventManager.send("wp.stop", null, null, 0, 0);
-                        //注册蓝牙接收广播
-                        blueToothControl.registerBlueTooth();
+                        //通过多线程处理蓝牙注册消息
+                        mHandler.post(mRunnable);
                     } else if ("wp.exit".equals(name)) {
                         sendMessage("WakeUpStoped-other");
                     }
@@ -240,7 +249,17 @@ public class MyGoogleActivity extends com.google.unity.GoogleUnityActivity
     @Override
     protected void onDestroy() {
         blueToothControl.bluetoothDestroy();
+        mHandler.removeCallbacks(mRunnable);
         super.onDestroy();
     }
+
+    //多线程处理蓝牙注册
+    private Handler mHandler = new Handler();
+    private Runnable mRunnable = new Runnable() {
+        public void run() {
+            //注册蓝牙接收广播
+            blueToothControl.registerBlueTooth();
+        }
+    };
 
 }

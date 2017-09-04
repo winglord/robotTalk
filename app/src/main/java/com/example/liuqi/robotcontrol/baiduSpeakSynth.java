@@ -40,8 +40,8 @@ public class baiduSpeakSynth{
     private static final int UI_CHANGE_SYNTHES_TEXT_SELECTION = 2;
 
     private static String voicer = "0";
-    private static String voiceSpeed = "100";
-    private static String voicePitch = "60";
+    private static String voiceSpeed = "6";
+    private static String voicePitch = "7";
 
     private static void initialEnv() {
         if (mSampleDirPath == null) {
@@ -129,9 +129,9 @@ public class baiduSpeakSynth{
         mSpeechSynthesizer.setApiKey("oL1mhfsAxd4Muy7DY61VhDKT",
                 "0b6e3afdcec39f7d12cb70b5f3b2d8e3"/*这里只是为了让Demo正常运行使用APIKey,请替换成自己的APIKey*/);
         // 发音人（在线引擎），可用参数为0,1,2,3。。。（服务器端会动态增加，各值含义参考文档，以文档说明为准。0--普通女声，1--普通男声，2--特别男声，3--情感男声。。。）
-        mSpeechSynthesizer.setParam(SpeechSynthesizer.PARAM_SPEAKER, "4");
-        mSpeechSynthesizer.setParam(SpeechSynthesizer.PARAM_SPEED, "7");
-        mSpeechSynthesizer.setParam(SpeechSynthesizer.PARAM_PITCH, "7");
+        mSpeechSynthesizer.setParam(SpeechSynthesizer.PARAM_SPEAKER, voicer);
+        mSpeechSynthesizer.setParam(SpeechSynthesizer.PARAM_SPEED, voiceSpeed);
+        mSpeechSynthesizer.setParam(SpeechSynthesizer.PARAM_PITCH, voicePitch);
         // 设置Mix模式的合成策略
         mSpeechSynthesizer.setParam(SpeechSynthesizer.PARAM_MIX_MODE, SpeechSynthesizer.MIX_MODE_DEFAULT);
         // 授权检测接口(只是通过AuthInfo进行检验授权是否成功。)
